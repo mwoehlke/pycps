@@ -41,7 +41,7 @@ class Configuration(object):
     requires = []
 
     #--------------------------------------------------------------------------
-    def __init__(self, json_data, prefix, parent=None):
+    def __init__(self, json_data, prefix=None, package=None, parent=None):
         def make_language_options(key, json_data, *args):
             return _make(LanguageOptions, key, json_data, *args)
 
@@ -62,9 +62,14 @@ class Configuration(object):
         get_or_inherit('link-flags', make_language_options)
         get_or_inherit('link-languages', _get)
         get_or_inherit('link-libraries', _get)
-        get_or_inherit('location', _get)
-        get_or_inherit('link-location', _get)
-        get_or_inherit('requires', _get)
+        get_or_inherit('location', _get_canonical, prefix)
+        get_or_inherit('link-location', _get_canonical, prefix)
+        get_or_inherit('requires', _get, [])
+
+        if package is not None:
+            for i in range(len(self.requires)):
+                if self.requires[i].startswith(':'):
+                    self.requires[i] = package + self.requires[i]
 
         if self.link_location is None:
             self.link_location = self.location
@@ -79,14 +84,14 @@ class Component(Configuration):
     configurations = {}
 
     #--------------------------------------------------------------------------
-    def __init__(self, json_data, prefix):
-        super(Component, self).__init__(json_data, prefix)
+    def __init__(self, json_data, prefix=None, package=None):
+        super(Component, self).__init__(json_data, prefix, package)
 
         self.kind = _get('type', json_data)
 
         configurations = {}
         for cn, cd in _get('configurations', json_data, {}).iteritems():
-            configurations[cn] = Configuration(cd, prefix, self)
+            configurations[cn] = Configuration(cd, prefix, package, self)
         self.configurations = configurations
 
 #==============================================================================
@@ -153,11 +158,11 @@ class Package(object):
             cps_path = _get('cps-path', json_data, '')
             prefix = '@prefix@' # FIXME
         else:
-            prefix = '@prefix@'
+            prefix = None
 
         components = {}
         for cn, cd in _get('components', json_data, {}).iteritems():
-            components[cn] = Component(cd, prefix)
+            components[cn] = Component(cd, prefix, self.name)
         self.components = components
 
         # TODO requires
@@ -179,6 +184,16 @@ def _get(key, json_data, default=None):
             return jv if jv is not None else default
 
     return default
+
+#------------------------------------------------------------------------------
+def _get_canonical(key, json_data, prefix, default=None):
+    value = _get(key, json_data, default)
+
+    if value is not None and prefix is not None:
+        if value.startswith('@prefix@'):
+            value = prefix + value[8:]
+
+    return value
 
 #------------------------------------------------------------------------------
 def _make(constructor, key, json_data, *args):
