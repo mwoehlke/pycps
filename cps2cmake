@@ -1,0 +1,117 @@
+#!/usr/bin/env python
+
+import cps
+import sys
+
+block_header = """
+cmake_minimum_required(VERSION 3.0)
+set(CMAKE_IMPORT_FILE_VERSION 1)
+"""
+
+block_check_targets = """
+set(_TARGETS_DEFINED)
+set(_TARGETS_NOT_DEFINED)
+
+foreach(_EXPECTED_TARGET ${_EXPECTED_TARGETS})
+  if(TARGET ${_EXPECTED_TARGET})
+    list(APPEND _TARGETS_DEFINED ${_EXPECTED_TARGET})
+  else()
+    list(APPEND _TARGETS_NOT_DEFINED ${_EXPECTED_TARGET})
+  endif()
+endforeach()
+
+if(_TARGETS_DEFINED STREQUAL _EXPECTED_TARGETS)
+  unset(_TARGETS_DEFINED)
+  unset(_TARGETS_NOT_DEFINED)
+  unset(_EXPECTED_TARGETS)
+
+  return()
+endif()
+
+if(NOT _TARGETS_DEFINED)
+  message(FATAL_ERROR "Some (but not all) targets in this package were already defined.")
+endif()
+
+unset(_TARGETS_NOT_DEFINED)
+unset(_TARGETS_DEFINED)
+unset(_EXPECTED_TARGETS)
+"""
+
+block_get_prefix = """
+get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+
+if(_IMPORT_PREFIX STREQUAL "/")
+  set(_IMPORT_PREFIX)
+endif()
+"""
+
+block_footer = """
+unset(_IMPORT_PREFIX)
+unset(CMAKE_IMPORT_FILE_VERSION)
+"""
+
+library_types = {
+    'dylib': 'SHARED',
+    'archive': 'STATIC',
+    'module': 'MODULE',
+    'interface': 'INTERFACE'
+}
+
+#------------------------------------------------------------------------------
+def qualified_component_name(package, component_name):
+    return '::'.join((package.name, component_name))
+
+#------------------------------------------------------------------------------
+def qualified_component_names(package):
+    result = []
+    for component_name in package.components:
+        result.append(qualified_component_name(package, component_name))
+
+    return result
+
+#------------------------------------------------------------------------------
+def fixup_path(path):
+    if path.startswith('@prefix@'):
+        return '${_IMPORT_PREFIX}' + path[8:]
+
+    return path
+
+#------------------------------------------------------------------------------
+def print_target_rules(component_name, component):
+    kind = component.kind.lower()
+    if kind in library_types:
+        print('add_library(%s %s IMPORTED)' %
+              (component_name, library_types[kind]))
+        print('set_target_properties(%s PROPERTIES' % component_name)
+
+        if component.link_location is not None:
+            print('  IMPORTED_LOCATION "%s"' %
+                  fixup_path(component.link_location))
+
+        includes = component.includes[None]
+        if len(includes):
+            includes = map(fixup_path, includes)
+            print('  INTERFACE_INCLUDE_DIRECTORIES "%s"' % ';'.join(includes))
+
+        # TODO requires
+        print(')')
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+package = cps.read(sys.argv[1], canonicalize=False)
+targets = qualified_component_names(package)
+
+print(block_header)
+print('set(_EXPECTED_TARGETS %s)' % ' '.join(targets))
+print(block_check_targets)
+print(block_get_prefix)
+
+for component_name, component in package.components.iteritems():
+    component_name = qualified_component_name(package, component_name)
+    print_target_rules(component_name, component)
+    print('')
+
+print(block_footer)

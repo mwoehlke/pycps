@@ -15,6 +15,12 @@ class LanguageOptions(object):
 
     #--------------------------------------------------------------------------
     def __getitem__(self, language):
+        if language is None:
+            if type(self.options) is not dict:
+                return self.options
+
+            # TODO compute union of flags
+
         if type(self.options) is dict:
             return _get(language, self.options, [])
 
