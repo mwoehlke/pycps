@@ -83,6 +83,10 @@ def fixup_path(path):
     return path
 
 #------------------------------------------------------------------------------
+def fixup_dep(dep):
+    return '::'.join(dep.split('@')[0].split(':'))
+
+#------------------------------------------------------------------------------
 def print_target_rules(component_name, component):
     kind = component.kind.lower()
     if kind in library_types:
@@ -99,7 +103,9 @@ def print_target_rules(component_name, component):
             includes = map(fixup_path, includes)
             print('  INTERFACE_INCLUDE_DIRECTORIES "%s"' % ';'.join(includes))
 
-        # TODO requires
+        if len(component.requires):
+            deps = map(fixup_dep, component.requires)
+            print('  INTERFACE_LINK_LIBRARIES %s' % ';'.join(deps))
         print(')')
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
