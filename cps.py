@@ -4,10 +4,8 @@ class LanguageOptions(object):
 
     #--------------------------------------------------------------------------
     def __init__(self, json_data, prefix=None):
-        self.options = json_data
-
-        if prefix is not None:
-            pass # TODO resolve for all values
+        normalize = lambda p: _normalize_path(p, prefix)
+        self.options = _normalize_values(json_data, normalize)
 
     #--------------------------------------------------------------------------
     def __repr__(self):
@@ -34,7 +32,7 @@ class Configuration(object):
     includes = None
     link_features = None
     link_flags = None
-    link_languages = ['C']
+    link_languages = ['c']
     link_libraries = []
     location = None
     link_location = None
@@ -54,13 +52,13 @@ class Configuration(object):
                 value = getattr(self, attr)
             setattr(self, attr, value)
 
-        get_or_inherit('compile-features', make_language_options)
+        get_or_inherit('compile-features', _get_normalized, _normalize_feature)
         get_or_inherit('compile-flags', make_language_options)
         get_or_inherit('definitions', make_language_options)
         get_or_inherit('includes', make_language_options, prefix)
-        get_or_inherit('link-features', make_language_options)
+        get_or_inherit('link-features', _get_normalized, _normalize_feature)
         get_or_inherit('link-flags', make_language_options)
-        get_or_inherit('link-languages', _get)
+        get_or_inherit('link-languages', _geti)
         get_or_inherit('link-libraries', _get)
         get_or_inherit('location', _get_canonical, prefix)
         get_or_inherit('link-location', _get_canonical, prefix)
@@ -113,7 +111,7 @@ class Platform(object):
         version = None
 
         def __init__(self, language, json_data):
-            self.vendor = _get('%s-vendor' % language, json_data)
+            self.vendor = _geti('%s-vendor' % language, json_data)
             self.version = _get('%s-version' % language, json_data)
 
         def __repr__(self):
@@ -121,8 +119,8 @@ class Platform(object):
 
     #--------------------------------------------------------------------------
     def __init__(self, json_data):
-        self.isa = _get('isa', json_data)
-        self.kernel = _get('kernel', json_data)
+        self.isa = _geti('isa', json_data)
+        self.kernel = _geti('kernel', json_data)
         self.c_runtime = Platform.Runtime('c-runtime', json_data)
         self.cpp_runtime = Platform.Runtime('cpp-runtime', json_data)
         self.clr = Platform.Runtime('clr', json_data)
@@ -177,6 +175,46 @@ class Package(object):
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 #------------------------------------------------------------------------------
+def _dvmap(func, d):
+    return {key: func(value) for key, value in d.iteritems()}
+
+#------------------------------------------------------------------------------
+def _normalize_path(path, prefix):
+    if path is not None and prefix is not None:
+        if path.startswith('@prefix@'):
+            return prefix + path[8:]
+
+    return path
+
+#------------------------------------------------------------------------------
+def _normalize_feature(feature):
+    if feature is None:
+        return None
+
+    if feature.lower() in {'warn:error', 'nowarn:error'}:
+        return feature.lower()
+
+    feature_parts = feature.split(':')
+    feature_parts[0] = feature_parts[0].lower()
+    return ':'.join(feature_parts)
+
+#------------------------------------------------------------------------------
+def _normalize_values(json_data, normalize_function):
+    normalize_recurse = lambda v: _normalize_values(v, normalize_function)
+
+    if type(json_data) is dict:
+        return _dvmap(normalize_recurse, json_data)
+
+    elif type(json_data) is list:
+        return map(normalize_recurse, json_data)
+
+    elif type(json_data) is unicode:
+        return normalize_function(json_data)
+
+    else:
+        return json_data
+
+#------------------------------------------------------------------------------
 def _get(key, json_data, default=None):
     key = key.lower()
     for jk, jv in json_data.iteritems():
@@ -186,14 +224,16 @@ def _get(key, json_data, default=None):
     return default
 
 #------------------------------------------------------------------------------
+def _get_normalized(key, json_data, normalize_function, default=None):
+    return _normalize_values(_get(key, json_data, default), normalize_function)
+
+#------------------------------------------------------------------------------
+def _geti(key, json_data, default=None):
+    return _get_normalized(key, json_data, lambda s: s.lower(), default)
+
+#------------------------------------------------------------------------------
 def _get_canonical(key, json_data, prefix, default=None):
-    value = _get(key, json_data, default)
-
-    if value is not None and prefix is not None:
-        if value.startswith('@prefix@'):
-            value = prefix + value[8:]
-
-    return value
+    return _normalize_path(_get(key, json_data, default), prefix)
 
 #------------------------------------------------------------------------------
 def _make(constructor, key, json_data, *args):
