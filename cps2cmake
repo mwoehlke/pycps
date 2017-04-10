@@ -64,6 +64,13 @@ library_types = {
     'interface': 'INTERFACE'
 }
 
+cpp11_features = {'cxx_decltype'}
+cpp14_features = {'cxx_decltype_auto'}.union(cpp11_features)
+feature_map = {
+    'c++11': cpp11_features,
+    'c++14': cpp14_features,
+}
+
 #------------------------------------------------------------------------------
 def qualified_component_name(package, component_name):
     return '::'.join((package.name, component_name))
@@ -107,6 +114,13 @@ def print_target_rules(component_name, component):
         if len(component.requires):
             deps = map(fixup_dep, component.requires)
             print('  INTERFACE_LINK_LIBRARIES %s' % ';'.join(deps))
+
+        features = set()
+        for feature in component.compile_features:
+            features = features.union(feature_map.get(feature, set()))
+        if len(features):
+            print('  INTERFACE_COMPILE_FEATURES "%s"' % ';'.join(features))
+
         print(')')
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
