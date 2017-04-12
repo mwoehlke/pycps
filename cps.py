@@ -1,4 +1,22 @@
 #==============================================================================
+class Object(object):
+    extensions = {}
+
+    #--------------------------------------------------------------------------
+    def __init__(self, json_data, prefix=None):
+        extensions = {}
+
+        for key, value in json_data.iteritems():
+            if key.lower().startswith('x-'):
+                extensions[key] = value;
+
+        self.extensions = extensions
+
+    #--------------------------------------------------------------------------
+    def __repr__(self):
+        return repr(self.__dict__)
+
+#==============================================================================
 class LanguageOptions(object):
     options = []
 
@@ -25,7 +43,7 @@ class LanguageOptions(object):
         return self.options
 
 #==============================================================================
-class Configuration(object):
+class Configuration(Object):
     compile_features = None
     compile_flags = None
     definitions = None
@@ -40,6 +58,8 @@ class Configuration(object):
 
     #--------------------------------------------------------------------------
     def __init__(self, json_data, prefix=None, package=None, parent=None):
+        super(Configuration, self).__init__(json_data)
+
         def make_language_options(key, json_data, *args):
             return _make(LanguageOptions, key, json_data, *args)
 
@@ -72,10 +92,6 @@ class Configuration(object):
         if self.link_location is None:
             self.link_location = self.location
 
-    #--------------------------------------------------------------------------
-    def __repr__(self):
-        return repr(self.__dict__)
-
 #==============================================================================
 class Component(Configuration):
     kind = None
@@ -93,11 +109,11 @@ class Component(Configuration):
         self.configurations = configurations
 
 #==============================================================================
-class Requirement(object):
+class Requirement(Object):
     pass # TODO
 
 #==============================================================================
-class Platform(object):
+class Platform(Object):
     isa = None
     kernel = None
     c_runtime = None
@@ -119,6 +135,8 @@ class Platform(object):
 
     #--------------------------------------------------------------------------
     def __init__(self, json_data):
+        super(Platform, self).__init__(json_data)
+
         self.isa = _geti('isa', json_data)
         self.kernel = _geti('kernel', json_data)
         self.c_runtime = Platform.Runtime('c-runtime', json_data)
@@ -126,12 +144,8 @@ class Platform(object):
         self.clr = Platform.Runtime('clr', json_data)
         self.jvm = Platform.Runtime('jvm', json_data)
 
-    #--------------------------------------------------------------------------
-    def __repr__(self):
-        return repr(self.__dict__)
-
 #==============================================================================
-class Package(object):
+class Package(Object):
     name = None
     platform = None
     version = None
@@ -143,7 +157,7 @@ class Package(object):
 
     #--------------------------------------------------------------------------
     def __init__(self, path, json_data):
-        import os
+        super(Package, self).__init__(json_data)
 
         self.name = _get('name', json_data)
         self.platform = _make(Platform, 'platform', json_data)
@@ -167,10 +181,6 @@ class Package(object):
 
         if self.compat_version is None:
             self.compat_version = self.version
-
-    #--------------------------------------------------------------------------
-    def __repr__(self):
-        return repr(self.__dict__)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
