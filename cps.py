@@ -55,6 +55,7 @@ class Configuration(Object):
     location = None
     link_location = None
     requires = []
+    link_requires = []
 
     #--------------------------------------------------------------------------
     def __init__(self, json_data, prefix=None, package=None, parent=None):
@@ -83,6 +84,7 @@ class Configuration(Object):
         get_or_inherit('location', _get_canonical, prefix)
         get_or_inherit('link-location', _get_canonical, prefix)
         get_or_inherit('requires', _get, [])
+        get_or_inherit('link-requires', _get, [])
 
         if package is not None:
             for i in range(len(self.requires)):
