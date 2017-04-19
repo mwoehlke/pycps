@@ -1,3 +1,7 @@
+import semantic_version as sv
+
+supported_cps_versions = sv.Spec('>=0.6.0,<=0.8.0')
+
 #==============================================================================
 class Object(object):
     extensions = {}
@@ -103,7 +107,7 @@ class Component(Configuration):
     def __init__(self, json_data, prefix=None, package=None):
         super(Component, self).__init__(json_data, prefix, package)
 
-        self.kind = _get('type', json_data)
+        self.kind = _get('type', json_data, required=True)
 
         configurations = {}
         for cn, cd in _get('configurations', json_data, {}).iteritems():
@@ -161,7 +165,12 @@ class Package(Object):
     def __init__(self, path, json_data):
         super(Package, self).__init__(json_data)
 
-        self.name = _get('name', json_data)
+        cps_version = _make(sv.Version, 'cps-version', json_data)
+        if not cps_version in supported_cps_versions:
+           raise NotImplementedError('CPS version %s is not supported' %
+                                     cps_version)
+
+        self.name = _get('name', json_data, required=True)
         self.platform = _make(Platform, 'platform', json_data)
         self.version = _get('version', json_data)
         self.compat_version = _get('compat-version', json_data)
@@ -227,11 +236,14 @@ def _normalize_values(json_data, normalize_function):
         return json_data
 
 #------------------------------------------------------------------------------
-def _get(key, json_data, default=None):
+def _get(key, json_data, default=None, required=False):
     key = key.lower()
     for jk, jv in json_data.iteritems():
         if jk.lower() == key:
             return jv if jv is not None else default
+
+    if required:
+        raise KeyError(key)
 
     return default
 
