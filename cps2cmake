@@ -132,6 +132,19 @@ def print_target_rules(package, component_name, component):
 
         print(')')
 
+    elif kind == 'exe':
+        print('add_executable(%s IMPORTED)' % component_name)
+        print('set_target_properties(%s PROPERTIES' % component_name)
+        print('  IMPORTED_LOCATION "%s"' % fixup_path(component.location))
+        print(')')
+
+    elif kind == 'jar':
+        print('add_library(%s STATIC IMPORTED)' % component_name)
+        print('set_target_properties(%s PROPERTIES' % component_name)
+        print('  IMPORTED_LOCATION "%s"' % fixup_path(component.location))
+        print('  JAR_FILE "%s"' % fixup_path(component.location))
+        print(')')
+
 #------------------------------------------------------------------------------
 def print_convenience_rules(package):
     fixup = lambda c: cmake_canonical_component_name(package, c)
