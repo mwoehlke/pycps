@@ -72,16 +72,13 @@ feature_map = {
 }
 
 #------------------------------------------------------------------------------
-def qualified_component_name(package, component_name):
+def cmake_qualified_component_name(package, component_name):
     return '::'.join((package.name, component_name))
 
 #------------------------------------------------------------------------------
-def qualified_component_names(package):
-    result = []
-    for component_name in package.components:
-        result.append(qualified_component_name(package, component_name))
-
-    return result
+def cmake_qualified_component_names(package):
+    fixup = lambda c: cmake_qualified_component_name(package, c)
+    return map(fixup, package.components)
 
 #------------------------------------------------------------------------------
 def fixup_path(path):
@@ -93,14 +90,14 @@ def fixup_path(path):
 #------------------------------------------------------------------------------
 def canonical_component_name(component, package):
     if component.startswith(':'):
-        return qualified_component_name(package, component[1:])
+        return ':'.join((package.name, component[1:]))
 
     return component
 
 #------------------------------------------------------------------------------
-def fixup_dep(package, dep):
-    dep = canonical_component_name(dep, package)
-    return '::'.join(dep.split('@')[0].split(':'))
+def cmake_canonical_component_name(package, component):
+    component = canonical_component_name(component, package)
+    return '::'.join(component.split('@')[0].split(':'))
 
 #------------------------------------------------------------------------------
 def print_target_rules(package, component_name, component):
@@ -121,7 +118,7 @@ def print_target_rules(package, component_name, component):
             print('  INTERFACE_INCLUDE_DIRECTORIES "%s"' % ';'.join(includes))
 
         if len(component.requires) or len(component.link_requires):
-            fixup = lambda dep: fixup_dep(package, dep)
+            fixup = lambda dep: cmake_canonical_component_name(package, dep)
             cdeps = map(fixup, component.requires)
             ldeps = map(fixup, component.link_requires)
             deps = cdeps + map(lambda d: '$<LINK_ONLY:%s>' % d, ldeps)
@@ -135,6 +132,13 @@ def print_target_rules(package, component_name, component):
 
         print(')')
 
+#------------------------------------------------------------------------------
+def print_convenience_rules(package):
+    fixup = lambda c: cmake_canonical_component_name(package, c)
+    libs = map(fixup, package.default_components)
+    print('set(%s_LIBRARIES "%s")' % (package.name, ';'.join(libs)))
+    print('set(%s_INCLUDE_DIRS "")' % package.name)
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 if len(sys.argv) < 2:
@@ -142,7 +146,7 @@ if len(sys.argv) < 2:
     sys.exit(0)
 
 package = cps.read(sys.argv[1], canonicalize=False)
-targets = qualified_component_names(package)
+targets = cmake_qualified_component_names(package)
 
 print(block_header)
 print('set(_expectedTargets %s)' % ' '.join(targets))
@@ -150,8 +154,10 @@ print(block_check_targets)
 print(block_get_prefix) # TODO account for install subdirectory
 
 for component_name, component in package.components.iteritems():
-    component_name = qualified_component_name(package, component_name)
+    component_name = cmake_qualified_component_name(package, component_name)
     print_target_rules(package, component_name, component)
     print('')
+
+print_convenience_rules(package)
 
 print(block_footer)
