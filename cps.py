@@ -25,9 +25,10 @@ class LanguageOptions(object):
     options = []
 
     #--------------------------------------------------------------------------
-    def __init__(self, json_data, prefix=None):
-        normalize = lambda p: _normalize_path(p, prefix)
-        self.options = _normalize_values(json_data, normalize)
+    def __init__(self, json_data=None, prefix=None):
+        if json_data is not None:
+            normalize = lambda p: _normalize_path(p, prefix)
+            self.options = _normalize_values(json_data, normalize)
 
     #--------------------------------------------------------------------------
     def __repr__(self):
@@ -48,12 +49,12 @@ class LanguageOptions(object):
 
 #==============================================================================
 class Configuration(Object):
-    compile_features = None
-    compile_flags = None
-    definitions = None
-    includes = None
-    link_features = None
-    link_flags = None
+    compile_features = []
+    compile_flags = LanguageOptions()
+    definitions = LanguageOptions()
+    includes = LanguageOptions()
+    link_features = []
+    link_flags = LanguageOptions()
     link_languages = ['c']
     link_libraries = []
     location = None
