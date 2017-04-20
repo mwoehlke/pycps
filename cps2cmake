@@ -151,6 +151,14 @@ def print_convenience_rules(package):
     libs = map(fixup, package.default_components)
     print('set(%s_LIBRARIES "%s")' % (package.name, ';'.join(libs)))
     print('set(%s_INCLUDE_DIRS "")' % package.name)
+    print('')
+
+#------------------------------------------------------------------------------
+def print_cmake_extensions(package):
+    for item in package.extensions.get('X-CMake-Includes', []):
+        print('include(%s)' % item)
+    for item in package.extensions.get('X-CMake-Variables', {}).iteritems():
+        print('set(%s "%s")' % item)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -172,5 +180,6 @@ for component_name, component in package.components.iteritems():
     print('')
 
 print_convenience_rules(package)
+print_cmake_extensions(package)
 
 print(block_footer)
