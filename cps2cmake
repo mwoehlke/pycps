@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import argparse
 import cps
 import sys
 
@@ -55,6 +56,21 @@ block_footer = """
 unset(_IMPORT_PREFIX)
 unset(CMAKE_IMPORT_FILE_VERSION)
 cmake_policy(POP)
+"""
+
+block_check_version = """
+if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)
+  set(PACKAGE_VERSION_COMPATIBLE FALSE)
+elseif(PACKAGE_VERSION VERSION_LESS COMPAT_VERSION)
+  set(PACKAGE_VERSION_COMPATIBLE FALSE)
+else()
+  set(PACKAGE_VERSION_COMPATIBLE TRUE)
+  if(PACKAGE_VERSION STREQUAL PACKAGE_FIND_VERSION)
+    set(PACKAGE_VERSION_EXACT TRUE)
+  endif()
+endif()
+
+unset(PACKAGE_COMPAT_VERSION)
 """
 
 library_types = {
@@ -160,26 +176,60 @@ def print_cmake_extensions(package):
     for item in package.extensions.get('X-CMake-Variables', {}).iteritems():
         print('set(%s "%s")' % item)
 
+#------------------------------------------------------------------------------
+def print_targets_config(package):
+    targets = cmake_qualified_component_names(package)
+
+    print(block_header)
+    print('set(_expectedTargets %s)' % ' '.join(targets))
+    print(block_check_targets)
+    print(block_get_prefix) # TODO account for install subdirectory
+
+    if package.version is not None:
+        print('set(%s_VERSION "%s")' % (package.name, package.version))
+        print('')
+
+    for component_name, component in package.components.iteritems():
+        component_name = cmake_qualified_component_name(package, component_name)
+        print_target_rules(package, component_name, component)
+        print('')
+
+    print_convenience_rules(package)
+    print_cmake_extensions(package)
+
+    print(block_footer)
+
+#------------------------------------------------------------------------------
+def print_version_check(package):
+    if package.version is not None:
+        print('set(PACKAGE_VERSION "%s")' % package.version)
+        print('set(PACKAGE_COMPAT_VERSION "%s")' % package.compat_version)
+        print(block_check_version)
+
+    # TODO arch check (32-bit vs. 64-bit)
+
+#------------------------------------------------------------------------------
+def main(args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input', metavar='CPS_FILE', type=str,
+                        help='Input CPS file')
+    parser.add_argument('--version-check',
+                        dest='version_check', action='store_true',
+                        help='Emit version check instead of targets')
+    args = parser.parse_args(args)
+
+    #if len(sys.argv) < 2:
+        #print 'Usage: %s <path to a CPS file>' % sys.argv[0]
+        #sys.exit(0)
+
+    package = cps.read(args.input, canonicalize=False)
+
+    if args.version_check:
+        print_version_check(package)
+    else:
+        print_targets_config(package)
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if len(sys.argv) < 2:
-    print 'Usage: %s <path to a CPS file>' % sys.argv[0]
-    sys.exit(0)
-
-package = cps.read(sys.argv[1], canonicalize=False)
-targets = cmake_qualified_component_names(package)
-
-print(block_header)
-print('set(_expectedTargets %s)' % ' '.join(targets))
-print(block_check_targets)
-print(block_get_prefix) # TODO account for install subdirectory
-
-for component_name, component in package.components.iteritems():
-    component_name = cmake_qualified_component_name(package, component_name)
-    print_target_rules(package, component_name, component)
-    print('')
-
-print_convenience_rules(package)
-print_cmake_extensions(package)
-
-print(block_footer)
+if __name__ == "__main__":
+    main(sys.argv[1:])
