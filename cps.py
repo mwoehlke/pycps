@@ -12,7 +12,7 @@ class Object(object):
 
         for key, value in json_data.iteritems():
             if key.lower().startswith('x-'):
-                extensions[key] = value;
+                extensions[key] = value
 
         self.extensions = extensions
 
@@ -167,9 +167,9 @@ class Package(Object):
         super(Package, self).__init__(json_data)
 
         cps_version = _make(sv.Version, 'cps-version', json_data)
-        if not cps_version in supported_cps_versions:
-           raise NotImplementedError('CPS version %s is not supported' %
-                                     cps_version)
+        if cps_version not in supported_cps_versions:
+            raise NotImplementedError('CPS version %s is not supported' %
+                                      cps_version)
 
         self.name = _get('name', json_data, required=True)
         self.platform = _make(Platform, 'platform', json_data)
