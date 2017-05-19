@@ -109,15 +109,22 @@ class Component(Configuration):
         super(Component, self).__init__(json_data, prefix, package)
 
         self.kind = _get('type', json_data, required=True)
-
-        configurations = {}
-        for cn, cd in _get('configurations', json_data, {}).iteritems():
-            configurations[cn] = Configuration(cd, prefix, package, self)
-        self.configurations = configurations
+        self.configurations = _make_dict(Configuration, 'configurations',
+                                         json_data, prefix, package, self)
 
 #==============================================================================
 class Requirement(Object):
-    pass # TODO
+    hints = []
+    components = []
+    version = None
+
+    #--------------------------------------------------------------------------
+    def __init__(self, json_data):
+        super(Requirement, self).__init__(json_data)
+
+        self.hints = _get('hints', json_data, [])
+        self.components = _get('components', json_data, [])
+        self.version = _get('version', json_data)
 
 #==============================================================================
 class Platform(Object):
@@ -184,12 +191,9 @@ class Package(Object):
         else:
             prefix = None
 
-        components = {}
-        for cn, cd in _get('components', json_data, {}).iteritems():
-            components[cn] = Component(cd, prefix, self.name)
-        self.components = components
-
-        # TODO requires
+        self.requires = _make_dict(Requirement, 'requires', json_data)
+        self.components = _make_dict(Component, 'components', json_data,
+                                     prefix, self.name)
 
         if self.compat_version is None:
             self.compat_version = self.version
@@ -267,6 +271,14 @@ def _make(constructor, key, json_data, *args):
         return constructor(json_data, *args)
 
     return None
+
+#------------------------------------------------------------------------------
+def _make_dict(constructor, key, json_data, *args):
+    result = {}
+    for name, data in _get(key, json_data, {}).iteritems():
+        result[name] = constructor(data, *args)
+
+    return result
 
 #------------------------------------------------------------------------------
 def read(filepath, canonicalize=True):
