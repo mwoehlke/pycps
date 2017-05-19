@@ -281,6 +281,10 @@ def _make_dict(constructor, key, json_data, *args):
     return result
 
 #------------------------------------------------------------------------------
+def get_extension(obj, name, default=None):
+    return _get(name, obj.extensions, default)
+
+#------------------------------------------------------------------------------
 def read(filepath, canonicalize=True):
     import json
     import os
