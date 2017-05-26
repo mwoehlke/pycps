@@ -188,6 +188,16 @@ def print_target_rules(package, component_name, component):
         if len(features):
             print('  INTERFACE_COMPILE_FEATURES "%s"' % ';'.join(features))
 
+        definitions = component.definitions[None]
+        definitions = [d for d in definitions if not d.startswith('!')]
+        if len(definitions):
+            print('  INTERFACE_COMPILE_DEFINITIONS "%s"' %
+                  ';'.join(definitions))
+
+        cflags = component.compile_flags[None]
+        if len(cflags):
+            print('  INTERFACE_COMPILE_OPTIONS "%s"' % ';'.join(cflags))
+
         print(')')
 
     elif kind == 'exe':
