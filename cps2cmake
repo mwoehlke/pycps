@@ -180,7 +180,7 @@ def print_target_rules(package, component_name, component):
             cdeps = map(fixup, component.requires)
             ldeps = map(fixup, component.link_requires)
             deps = cdeps + map(lambda d: '$<LINK_ONLY:%s>' % d, ldeps)
-            print('  INTERFACE_LINK_LIBRARIES %s' % ';'.join(deps))
+            print('  INTERFACE_LINK_LIBRARIES "%s"' % ';'.join(deps))
 
         features = set()
         for feature in component.compile_features:
