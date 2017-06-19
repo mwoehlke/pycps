@@ -158,6 +158,20 @@ def cmake_canonical_component_name(package, component):
     return '::'.join(component.split('@')[0].split(':'))
 
 #------------------------------------------------------------------------------
+def link_dependencies(package, component):
+    def fixup(dep):
+        return cmake_canonical_component_name(package, dep)
+
+    deps = map(fixup, component.requires)
+
+    link_only_deps = map(fixup, component.link_requires)
+    deps += map(lambda d: '$<LINK_ONLY:%s>' % d, link_only_deps)
+
+    deps += component.link_flags[None]
+
+    return deps
+
+#------------------------------------------------------------------------------
 def print_target_rules(package, component_name, component):
     # TODO java targets
     kind = component.kind.lower()
@@ -175,12 +189,9 @@ def print_target_rules(package, component_name, component):
             includes = map(fixup_path, includes)
             print('  INTERFACE_INCLUDE_DIRECTORIES "%s"' % ';'.join(includes))
 
-        if len(component.requires) or len(component.link_requires):
-            fixup = lambda dep: cmake_canonical_component_name(package, dep)
-            cdeps = map(fixup, component.requires)
-            ldeps = map(fixup, component.link_requires)
-            deps = cdeps + map(lambda d: '$<LINK_ONLY:%s>' % d, ldeps)
-            print('  INTERFACE_LINK_LIBRARIES "%s"' % ';'.join(deps))
+        link_deps = link_dependencies(package, component)
+        if len(link_deps):
+            print('  INTERFACE_LINK_LIBRARIES "%s"' % ';'.join(link_deps))
 
         features = set()
         for feature in component.compile_features:
