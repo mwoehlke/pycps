@@ -1,6 +1,8 @@
 import semantic_version as sv
 
-supported_cps_versions = sv.Spec('>=0.6.0,<=0.8.0')
+current_version_info = [0, 8, 0]
+current_version = ".".join(map(str, current_version_info))
+supported_cps_versions = sv.Spec('>=0.6.0,<=%s' % current_version)
 
 #==============================================================================
 class Object(object):
@@ -297,7 +299,8 @@ def read(filepath, canonicalize=True):
     json_data = json.load(open(filepath))
     return Package(path, json_data)
 
-#------------------------------------------------------------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 if __name__ == '__main__':
     import sys
     print read(sys.argv[1])

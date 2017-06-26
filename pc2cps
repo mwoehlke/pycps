@@ -1,0 +1,153 @@
+#!/usr/bin/env python
+
+import argparse
+import cps
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+
+#==============================================================================
+class pkgconfig(object):
+    name = None
+    attr = {}
+    var = {}
+
+    _re_var = re.compile('(\w+)=(.*)')
+    _re_attr = re.compile('([\w.]+): (.*)')
+    _re_subst = re.compile('[$][{](\w+)[}]')
+
+    #--------------------------------------------------------------------------
+    def __init__(self, path):
+        self.name = os.path.splitext(os.path.basename(path))[0]
+        self.var = {}
+        self.attr = {}
+
+        with open(path) as f:
+            for l in f:
+                mv = self._re_var.match(l)
+                if mv is not None:
+                    self.var[mv.group(1)] = mv.group(2)
+                    continue
+
+                ma = self._re_attr.match(l)
+                if ma is not None:
+                    self.attr[ma.group(1)] = self._expand(ma.group(2))
+                    continue
+
+    #--------------------------------------------------------------------------
+    def _expand(self, s):
+        def subst(m):
+            return self.var[m.group(1)]
+
+        return self._re_subst.sub(subst, s)
+
+    #--------------------------------------------------------------------------
+    def _get_split(self, attr_name):
+        v = self.attr.get(attr_name)
+        if v is None:
+            return None
+
+        return shlex.split(v)
+
+    #--------------------------------------------------------------------------
+    @property
+    def requires(self):
+        ds = self.attr.get('Requires')
+        if ds is None:
+            return None
+
+        deps = {}
+
+        ds = ds.replace(' >= ', '=')
+        for dep in ds.split():
+            dep = dep.split('=')
+            if len(dep) > 1:
+                deps[dep[0]] = {'Version': dep[1]}
+            else:
+                deps[dep[0]] = {}
+
+        return deps
+
+    #--------------------------------------------------------------------------
+    @property
+    def component(self):
+        def _keys(x):
+            return None if x is None else x.keys()
+
+        c = {
+            'Type': 'interface',
+        }
+        extend(c, 'Link-Flags', self._get_split('Libs'))
+        extend(c, 'Requires', _keys(self.requires))
+
+        for f in self._get_split('Cflags'):
+            if f.startswith('-I'):
+                append(c, 'Includes', f[2:])
+            else:
+                append(c, 'Compile-Flags', f)
+
+        return c
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+#------------------------------------------------------------------------------
+def fatal(message, result=1):
+    sys.stderr.write(message)
+    sys.exit(result)
+
+#------------------------------------------------------------------------------
+def parse(path_or_name):
+    if not os.path.exists(path_or_name):
+        p = subprocess.Popen(['pkgconf', '--path', path_or_name],
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+        out, err = p.communicate()
+        if p.returncode != 0:
+            fatal("Package %r not found" % path_or_name)
+
+        path_or_name = out.strip()
+
+    return pkgconfig(path_or_name)
+
+#------------------------------------------------------------------------------
+def extend(data, key, value):
+    if value is not None:
+        data.update({key: value})
+
+#------------------------------------------------------------------------------
+def append(data, key, value):
+    if not key in data:
+        data[key] = []
+    data[key].append(value)
+
+#------------------------------------------------------------------------------
+def main(args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        'input', metavar='PACKAGE', type=str,
+        help='Input pkg-config (.pc) file name or package name')
+    args = parser.parse_args(args)
+
+    package = parse(args.input)
+
+    component_name = package.attr.get('Name', package.name)
+    spec = {
+        'Cps-Version': cps.current_version,
+        'Name': package.name,
+        'Components': {component_name: package.component},
+        'Default-Components': [':%s' % component_name],
+    }
+    extend(spec, 'Version', package.attr.get('Version'))
+    extend(spec, 'Description', package.attr.get('Description'))
+    extend(spec, 'Website', package.attr.get('URL'))
+    extend(spec, 'Requires', package.requires)
+
+    print(json.dumps(spec, indent=2, sort_keys=True))
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
