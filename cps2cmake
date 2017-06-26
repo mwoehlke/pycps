@@ -154,6 +154,9 @@ def canonical_component_name(component, package):
 
 #------------------------------------------------------------------------------
 def cmake_canonical_component_name(package, component):
+    if not ':' in component:
+        return '${%s_LIBRARIES}' % component
+
     component = canonical_component_name(component, package)
     return '::'.join(component.split('@')[0].split(':'))
 
