@@ -54,7 +54,7 @@ if(CMAKE_VERSION VERSION_LESS 3.9.0)
     endif()
   endmacro()
 else()
-  include(CMakeFindDepenencyMacro)
+  include(CMakeFindDependencyMacro)
 endif()
 """
 
