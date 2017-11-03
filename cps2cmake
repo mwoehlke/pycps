@@ -233,16 +233,17 @@ def print_convenience_rules(package):
     print('')
 
 #------------------------------------------------------------------------------
-def print_cmake_extensions(package):
-    for item in get_extension(package, 'X-CMake-Includes', []):
+def print_cmake_extensions(package, includesvar, variablesvar):
+    for item in get_extension(package, includesvar, []):
         print('include(%s)' % item)
-    for item in get_extension(package, 'X-CMake-Variables', {}).iteritems():
+    for item in get_extension(package, variablesvar, {}).iteritems():
         print('set(%s "%s")' % item)
 
 #------------------------------------------------------------------------------
 def print_targets_config(package):
     print(block_header)
     print(block_get_prefix) # TODO account for install subdirectory
+    print_cmake_extensions(package, 'X-CMake-Prepend-Includes', 'X-CMake-Prepend-Variables')
 
     for requirement_name, requirement_info in package.requires.iteritems():
         fd_args = ''
@@ -272,7 +273,7 @@ def print_targets_config(package):
         print('')
 
     print_convenience_rules(package)
-    print_cmake_extensions(package)
+    print_cmake_extensions(package, 'X-CMake-Includes', 'X-CMake-Variables')
 
     print(block_footer)
 
