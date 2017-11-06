@@ -233,17 +233,16 @@ def print_convenience_rules(package):
     print('')
 
 #------------------------------------------------------------------------------
-def print_cmake_extensions(package, includesvar, variablesvar):
-    for item in get_extension(package, includesvar, []):
+def print_cmake_extensions(package):
+    for item in get_extension(package, 'X-CMake-Includes', []):
         print('include(%s)' % item)
-    for item in get_extension(package, variablesvar, {}).iteritems():
+    for item in get_extension(package, 'X-CMake-Variables', {}).iteritems():
         print('set(%s "%s")' % item)
 
 #------------------------------------------------------------------------------
 def print_targets_config(package):
     print(block_header)
     print(block_get_prefix) # TODO account for install subdirectory
-    print_cmake_extensions(package, 'X-CMake-Prepend-Includes', 'X-CMake-Prepend-Variables')
 
     for requirement_name, requirement_info in package.requires.iteritems():
         fd_args = ''
@@ -257,7 +256,10 @@ def print_targets_config(package):
             hints = [fixup_path(p) for p in requirement_info.hints]
             fd_args += ' HINTS "' + '" "'.join(hints) + '"'
 
+        print_cmake_extensions(requirement_info)
         print('find_dependency(%s%s)' % (requirement_name, fd_args))
+        for item in get_extension(requirement_info, 'X-CMake-Variables', []):
+            print('unset(%s)' % (item))
 
     targets = cmake_qualified_component_names(package)
     print('set(_expectedTargets %s)' % ' '.join(targets))
@@ -273,7 +275,7 @@ def print_targets_config(package):
         print('')
 
     print_convenience_rules(package)
-    print_cmake_extensions(package, 'X-CMake-Includes', 'X-CMake-Variables')
+    print_cmake_extensions(package)
 
     print(block_footer)
 
