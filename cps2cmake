@@ -239,8 +239,8 @@ def print_cmake_extensions(package, ext_template = 'X-CMake-{}'):
         print('include(%s)' % item)
 
     varvar = ext_template.format('Variables')
-    for item in get_extension(package, varvar, {}).iteritems():
-        print('set(%s "%s")' % item)
+    for k,v in get_extension(package, varvar, {}).iteritems():
+        print('set(%s "%s" ${%s})' % (k, v, k))
 
 #------------------------------------------------------------------------------
 def print_targets_config(package):
