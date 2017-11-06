@@ -233,16 +233,21 @@ def print_convenience_rules(package):
     print('')
 
 #------------------------------------------------------------------------------
-def print_cmake_extensions(package):
-    for item in get_extension(package, 'X-CMake-Includes', []):
+def print_cmake_extensions(package, ext_template = 'X-CMake-{}'):
+    incvar = ext_template.format('Includes')
+    for item in get_extension(package, incvar, []):
         print('include(%s)' % item)
-    for item in get_extension(package, 'X-CMake-Variables', {}).iteritems():
+
+    varvar = ext_template.format('Variables')
+    for item in get_extension(package, varvar, {}).iteritems():
         print('set(%s "%s")' % item)
 
 #------------------------------------------------------------------------------
 def print_targets_config(package):
     print(block_header)
     print(block_get_prefix) # TODO account for install subdirectory
+
+    print_cmake_extensions(package, 'X-CMake-{}-Init')
 
     for requirement_name, requirement_info in package.requires.iteritems():
         fd_args = ''
