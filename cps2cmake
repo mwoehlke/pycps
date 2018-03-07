@@ -2,6 +2,7 @@
 
 import argparse
 import cps
+import os
 import sys
 
 get_extension = cps.get_extension
@@ -183,6 +184,11 @@ def print_target_rules(package, component_name, component):
         if component.link_location is not None:
             print('  IMPORTED_LOCATION "%s"' %
                   fixup_path(component.link_location))
+            if kind == 'dylib':
+                soname = os.path.basename(component.link_location)
+                if sys.platform == 'darwin':
+                   soname = os.path.join('@rpath', soname)
+                print('  IMPORTED_SONAME "%s"' % soname)
 
         includes = component.includes[None]
         if len(includes):
