@@ -42,7 +42,10 @@ class pkgconfig(object):
         def subst(m):
             return self.var[m.group(1)]
 
-        return self._re_subst.sub(subst, s)
+        n = self._re_subst.sub(subst, s)
+        if n != s:
+            return self._expand(n)
+        return n
 
     #--------------------------------------------------------------------------
     def _get_split(self, attr_name):
