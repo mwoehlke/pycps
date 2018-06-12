@@ -6,17 +6,13 @@ supported_cps_versions = sv.Spec('>=0.6.0,<=%s' % current_version)
 
 #==============================================================================
 class Object(object):
-    extensions = {}
-
     #--------------------------------------------------------------------------
     def __init__(self, json_data, prefix=None):
-        extensions = {}
+        self.extensions = {}
 
         for key, value in json_data.iteritems():
             if key.lower().startswith('x-'):
-                extensions[key] = value
-
-        self.extensions = extensions
+                self.extensions[key] = value
 
     #--------------------------------------------------------------------------
     def __repr__(self):
@@ -24,10 +20,9 @@ class Object(object):
 
 #==============================================================================
 class LanguageOptions(object):
-    options = []
-
     #--------------------------------------------------------------------------
     def __init__(self, json_data=None, prefix=None):
+        self.options = []
         if json_data is not None:
             normalize = lambda p: _normalize_path(p, prefix)
             self.options = _normalize_values(json_data, normalize)
@@ -51,21 +46,21 @@ class LanguageOptions(object):
 
 #==============================================================================
 class Configuration(Object):
-    compile_features = []
-    compile_flags = LanguageOptions()
-    definitions = LanguageOptions()
-    includes = LanguageOptions()
-    link_features = []
-    link_flags = LanguageOptions()
-    link_languages = ['c']
-    link_libraries = []
-    location = None
-    link_location = None
-    requires = []
-    link_requires = []
-
     #--------------------------------------------------------------------------
     def __init__(self, json_data, prefix=None, package=None, parent=None):
+        self.compile_features = []
+        self.compile_flags = LanguageOptions()
+        self.definitions = LanguageOptions()
+        self.includes = LanguageOptions()
+        self.link_features = []
+        self.link_flags = LanguageOptions()
+        self.link_languages = ['c']
+        self.link_libraries = []
+        self.location = None
+        self.link_location = None
+        self.requires = []
+        self.link_requires = []
+
         super(Configuration, self).__init__(json_data)
 
         def make_language_options(key, json_data, *args):
@@ -103,9 +98,6 @@ class Configuration(Object):
 
 #==============================================================================
 class Component(Configuration):
-    kind = None
-    configurations = {}
-
     #--------------------------------------------------------------------------
     def __init__(self, json_data, prefix=None, package=None):
         super(Component, self).__init__(json_data, prefix, package)
@@ -116,10 +108,6 @@ class Component(Configuration):
 
 #==============================================================================
 class Requirement(Object):
-    hints = []
-    components = []
-    version = None
-
     #--------------------------------------------------------------------------
     def __init__(self, json_data):
         super(Requirement, self).__init__(json_data)
@@ -130,18 +118,8 @@ class Requirement(Object):
 
 #==============================================================================
 class Platform(Object):
-    isa = None
-    kernel = None
-    c_runtime = None
-    cpp_runtime = None
-    clr = None
-    jvm = None
-
     #==========================================================================
     class Runtime(object):
-        vendor = None
-        version = None
-
         def __init__(self, language, json_data):
             self.vendor = _geti('%s-vendor' % language, json_data)
             self.version = _get('%s-version' % language, json_data)
@@ -162,15 +140,6 @@ class Platform(Object):
 
 #==============================================================================
 class Package(Object):
-    name = None
-    platform = None
-    version = None
-    compat_version = None
-    configurations = []
-    components = {}
-    default_components = []
-    requires = {}
-
     #--------------------------------------------------------------------------
     def __init__(self, path, json_data):
         super(Package, self).__init__(json_data)
