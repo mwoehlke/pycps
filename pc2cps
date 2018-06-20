@@ -11,19 +11,35 @@ import sys
 
 #==============================================================================
 class pkgconfig(object):
-    name = None
-    attr = {}
-    var = {}
 
     _re_var = re.compile('(\w+)=(.*)')
     _re_attr = re.compile('([\w.]+): (.*)')
     _re_subst = re.compile('[$][{](\w+)[}]')
+    _libname_flag = '-l'
+    _libpath_flag = '-L'
+    _lib_pattern = {
+                    'dylib': '(\.so(.[0-9]+)*|\.dylib)',
+                    'archive': '(\.a)'
+                   }
+
+    _type_order = ['dylib', 'archive']
 
     #--------------------------------------------------------------------------
-    def __init__(self, path):
+    def __init__(self, path, library_name=None, type_order=None, keep_link_flags=False, black_list=[]):
         self.name = os.path.splitext(os.path.basename(path))[0]
         self.var = {}
         self.attr = {}
+        self.requires = {}
+
+        self.keep_link_flags = keep_link_flags
+        self.black_list = black_list
+
+        if not type_order:
+            type_order=self._type_order[0]
+        self.parse_order = [type_order] + [x for x in self._type_order if x != type_order]
+        self.library_name = library_name
+        if not self.library_name:
+            self.library_name = self.name
 
         with open(path) as f:
             for l in f:
@@ -37,6 +53,8 @@ class pkgconfig(object):
                     self.attr[ma.group(1)] = self._expand(ma.group(2))
                     continue
 
+        self._extract_requires()
+
     #--------------------------------------------------------------------------
     def _expand(self, s):
         def subst(m):
@@ -45,6 +63,7 @@ class pkgconfig(object):
         n = self._re_subst.sub(subst, s)
         if n != s:
             return self._expand(n)
+
         return n
 
     #--------------------------------------------------------------------------
@@ -56,8 +75,7 @@ class pkgconfig(object):
         return shlex.split(v)
 
     #--------------------------------------------------------------------------
-    @property
-    def requires(self):
+    def _extract_requires(self):
         ds = self.attr.get('Requires')
         if ds is None:
             return None
@@ -72,27 +90,87 @@ class pkgconfig(object):
             else:
                 deps[dep[0]] = {}
 
-        return deps
+        self.requires = deps
+
+
+    def _find_location(self, link_directories):
+        # If not found and if package name given in library list with
+        # "-l" flag, an error should be thrown?
+        for order in self.parse_order:
+            for path in link_directories:
+                for file in os.listdir(path):
+                    pattern = '(lib)?' + self.library_name\
+                              + self._lib_pattern[order]
+                    ma = re.match(pattern, file)
+                    if ma is not None:
+                        return os.path.join(path, ma.group(0)), order
 
     #--------------------------------------------------------------------------
     @property
     def component(self):
         def _keys(x):
-            return None if x is None else x.keys()
+            return [] if x is None else x.keys()
 
-        c = {
-            'Type': 'interface',
-        }
-        extend(c, 'Link-Flags', self._get_split('Libs'))
-        extend(c, 'Requires', _keys(self.requires))
+        def _list(flag):
+            return [x[len(flag):] for x in link_flags if x.startswith(flag)]
+
+        _component = {}
+
+        # Preprocess libraries
+        link_flags = self._get_split('Libs')
+        # Find all library paths
+        link_directories = [x for x in _list(self._libpath_flag) if os.path.isdir(x)]
+
+        # Find all libraries
+        link_libraries = _list(self._libname_flag)
+
+        # NOTE: We are making the assumption that the extension of the file is
+        # correct. This could be replaced by `os.path.realpath()` followed by
+        # calling the executable `file` to be safer.
+        location, libtype = self._find_location(link_directories)
+        if location:
+            # `type` will always be
+            extend(_component, 'Type', libtype)
+            extend(_component, 'Location', location)
+            # Remove dependency on itself.
+            # some library names already contain the prefix `lib`.
+            link_libraries = [x for x in link_libraries
+                        if not re.match('(lib)?' + x, self.library_name)]
+
+        if not self.keep_link_flags:
+            # Add system libraries found in link flags to requirements except if they are black listed.
+            list_requires = _keys(self.requires)
+
+            # Extract link flags that are neither library names nor library paths.
+            link_flags = [x for x in link_flags if not x.startswith(self._libname_flag)
+                          and not x.startswith(self._libpath_flag)]
+
+            # Add libraries that are black-listed to link flags.
+            link_library_flags = [self._libname_flag+x for x in link_libraries if x in self.black_list]
+            if link_library_flags:
+                # If there are libraries added to the flags, also add the link directories.
+                link_library_flags += [self._libpath_flag+x for x in link_directories]
+                link_flags += link_library_flags
+            # Pkgconfig files are inconsistent with lowercase and uppercase.
+            # To avoid duplication of names, we compare everything in lowercase,
+            # but keep the library link name in the final requires list.
+            required_link_libraries = [x for x in link_libraries if x not in self.black_list]
+            self.requires = {x: {} for x in required_link_libraries}
+            libs_lower = [x.lower() for x in required_link_libraries]
+            self.requires.update({x: {} for x in list_requires if x.lower()
+                                  not in libs_lower})
+
+
+        extend(_component, 'Requires', _keys(self.requires))
+        extend(_component, 'Link-Flags', link_flags)
 
         for f in self._get_split('Cflags'):
             if f.startswith('-I'):
-                append(c, 'Includes', f[2:])
+                append(_component, 'Includes', f[2:])
             else:
-                append(c, 'Compile-Flags', f)
+                append(_component, 'Compile-Flags', f)
 
-        return c
+        return _component
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -102,7 +180,7 @@ def fatal(message, result=1):
     sys.exit(result)
 
 #------------------------------------------------------------------------------
-def parse(path_or_name):
+def parse(path_or_name, library_name, type_order, keep_link_flags, black_list):
     if not os.path.exists(path_or_name):
         p = subprocess.Popen(['pkgconf', '--path', path_or_name],
                              stdout=subprocess.PIPE,
@@ -113,7 +191,7 @@ def parse(path_or_name):
 
         path_or_name = out.strip()
 
-    return pkgconfig(path_or_name)
+    return pkgconfig(path_or_name, library_name, type_order, keep_link_flags, black_list)
 
 #------------------------------------------------------------------------------
 def extend(data, key, value):
@@ -132,10 +210,22 @@ def main(args):
     parser.add_argument(
         'input', metavar='PACKAGE', type=str,
         help='Input pkg-config (.pc) file name or package name')
+    parser.add_argument(
+        '-n', '--library-name', required=False, type=str,
+        help='Manually specify library name')
+    parser.add_argument(
+        '-k', '--keep-link-flags', required=False, action='store_true',
+        help='Keep library names and paths in link-flags instead of moving them to `Requires` field.')
+    parser.add_argument(
+        '-b', '--black-list', required=False, nargs='+', default=[],
+        help='List of black-listed libraries that are kept in `Link-Flags`')
+    parser.add_argument(
+        '--library-type-order', dest='order', action='store',
+        choices=pkgconfig._type_order,
+        help='Order in which libraries are searched')
     args = parser.parse_args(args)
 
-    package = parse(args.input)
-
+    package = parse(args.input, args.library_name, args.order, args.keep_link_flags, args.black_list)
     component_name = package.attr.get('Name', package.name)
     spec = {
         'Cps-Version': cps.current_version,
