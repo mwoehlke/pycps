@@ -11,19 +11,29 @@ import sys
 
 #==============================================================================
 class pkgconfig(object):
-    name = None
-    attr = {}
-    var = {}
-
-    _re_var = re.compile('(\w+)=(.*)')
-    _re_attr = re.compile('([\w.]+): (.*)')
-    _re_subst = re.compile('[$][{](\w+)[}]')
+    _re_var = re.compile('(\\w+)=(.*)')
+    _re_attr = re.compile('([\\w.]+): (.*)')
+    _re_subst = re.compile('[$][{](\\w+)[}]')
+    _rre_lib_suffix = {
+        'dylib': '([.]so(?=([.][0-9]+)*$)|[.]dylib$)',
+        'archive': '([.]a$)'
+    }
+    _type_order = ['dylib', 'archive']
 
     #--------------------------------------------------------------------------
-    def __init__(self, path):
+    def __init__(self, path, library_name=None, preferred_library_type=None,
+                 libs_to_requires=False, keep_link_libs=set()):
         self.name = os.path.splitext(os.path.basename(path))[0]
         self.var = {}
         self.attr = {}
+        self.requires = {}
+        self._ordered_requires = []
+
+        self._library_name = library_name or self.name
+        if preferred_library_type is not None:
+            self._preferred_library_type = preferred_library_type
+        else:
+            self._preferred_library_type = self._type_order[0]
 
         with open(path) as f:
             for l in f:
@@ -36,6 +46,9 @@ class pkgconfig(object):
                 if ma is not None:
                     self.attr[ma.group(1)] = self._expand(ma.group(2))
                     continue
+
+        self._extract_requires()
+        self._extract_component(libs_to_requires, keep_link_libs)
 
     #--------------------------------------------------------------------------
     def _expand(self, s):
@@ -56,13 +69,13 @@ class pkgconfig(object):
         return shlex.split(v)
 
     #--------------------------------------------------------------------------
-    @property
-    def requires(self):
+    def _extract_requires(self):
         ds = self.attr.get('Requires')
         if ds is None:
             return None
 
         deps = {}
+        odeps = []
 
         ds = ds.replace(' >= ', '=')
         for dep in ds.split():
@@ -71,28 +84,107 @@ class pkgconfig(object):
                 deps[dep[0]] = {'Version': dep[1]}
             else:
                 deps[dep[0]] = {}
+            odeps.append(dep[0])
 
-        return deps
+        self.requires = deps
+        self._ordered_requires = odeps
 
     #--------------------------------------------------------------------------
-    @property
-    def component(self):
-        def _keys(x):
-            return None if x is None else x.keys()
+    def _find_library(self, lib_paths):
+        pt = self._preferred_library_type
+        types = [pt] + [x for x in self._type_order if x != pt]
 
-        c = {
-            'Type': 'interface',
-        }
-        extend(c, 'Link-Flags', self._get_split('Libs'))
-        extend(c, 'Requires', _keys(self.requires))
+        # Search for the location of our library
+        for lib_type in types:
+            match = None
+            # Check all search paths
+            for path in lib_paths:
+                re_lib = re.compile('(lib)?{}{}'.format(
+                    self._library_name, self._rre_lib_suffix[lib_type]))
+                for f in os.listdir(path):
+                    m = re.match(re_lib, f)
+                    # If a matching name is found, take the shortest match
+                    if m is not None:
+                        m = m.group(0)
+                        if match is None or len(match) > m:
+                            match = m
+
+            # If found, accept a match for the current type being searched
+            if match:
+                return os.path.join(path, match), lib_type
+
+    #--------------------------------------------------------------------------
+    def _extract_component(self, libs_to_requires, keep_link_libs):
+        def _keys(x):
+            return [] if x is None else x.keys()
+
+        self.component = {}
+
+        # Preprocess libraries
+        link_flags = self._get_split('Libs')
+
+        # Extract all library paths
+        lib_paths = [x[2:] for x in link_flags
+                     if x.startswith('-L') and os.path.isdir(x[2:])]
+
+        # Extract list of libraries to link and find the location of this
+        # component's library
+        link_libs = [x[2:] for x in link_flags if x.startswith('-l')]
+        location, lib_type = self._find_library(lib_paths)
+        if location:
+            extend(self.component, 'Type', lib_type)
+            extend(self.component, 'Location', location)
+
+            # Remove self from list of link libraries
+            my_libnames = {self._library_name}
+            if self._library_name.startswith('lib'):
+                my_libnames.add(self._library_name[3:])
+
+            link_libs = [x for x in link_libs if not x in my_libnames]
+
+
+        # Convert link libraries to Requires
+        pkg_deps = self._ordered_requires
+        link_deps = set()
+        if libs_to_requires:
+            for lib in link_libs:
+                if lib in keep_link_libs:
+                    continue
+
+                # Add to Requires
+                if lib not in pkg_deps:
+                    self.requires[lib] = {}
+                    pkg_deps.append(lib)
+
+                # Mark for removal from link_libs
+                link_deps.add(lib)
+
+            # Remove converted link libraries from link_libs
+            link_libs = [x for x in link_libs if x not in link_deps]
+
+            # Update requires dictionary
+            self.requires.update({x: {} for x in link_deps})
+
+        # Remove from link flags anything that was removed from link_libs,
+        # which includes our own library, and any converted to Requires
+        if len(link_libs):
+            link_libs = ['-l' + x for x in link_libs]
+            link_flags = [x for x in link_flags
+                          if x in link_libs or not x.startswith('-l')]
+        else:
+            # If link_libs is empty, strip all -l and -L from link_flags
+            link_flags = [x for x in link_flags
+                          if not (x.startswith('-l') or x.startswith('-L'))]
+
+        # Finish filling in component information
+        extend(self.component, 'Link-Flags', link_flags)
+        extend(self.component, 'Requires', pkg_deps)
 
         for f in self._get_split('Cflags'):
             if f.startswith('-I'):
-                append(c, 'Includes', f[2:])
+                append(self.component, 'Includes', f[2:])
             else:
-                append(c, 'Compile-Flags', f)
-
-        return c
+                append(self.component, 'Compile-Flags', f)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -102,7 +194,7 @@ def fatal(message, result=1):
     sys.exit(result)
 
 #------------------------------------------------------------------------------
-def parse(path_or_name):
+def parse(path_or_name, *args, **kwargs):
     if not os.path.exists(path_or_name):
         p = subprocess.Popen(['pkgconf', '--path', path_or_name],
                              stdout=subprocess.PIPE,
@@ -113,11 +205,18 @@ def parse(path_or_name):
 
         path_or_name = out.strip()
 
-    return pkgconfig(path_or_name)
+    return pkgconfig(path_or_name, *args, **kwargs)
+
+#------------------------------------------------------------------------------
+def is_empty(value):
+    try:
+        return len(value) == 0
+    except TypeError:
+        return value is None
 
 #------------------------------------------------------------------------------
 def extend(data, key, value):
-    if value is not None:
+    if not is_empty(value):
         data.update({key: value})
 
 #------------------------------------------------------------------------------
@@ -132,10 +231,25 @@ def main(args):
     parser.add_argument(
         'input', metavar='PACKAGE', type=str,
         help='Input pkg-config (.pc) file name or package name')
+    parser.add_argument(
+        '-n', '--library-name', required=False, type=str,
+        help='Name of component library (overrides guessing ' +
+             'from pkg-config package name)')
+    parser.add_argument(
+        '-t', '--library-type', action='store',
+        choices=pkgconfig._type_order,
+        default=pkgconfig._type_order[0],
+        help='Preferred library type')
+    parser.add_argument(
+        '-c', '--convert-link-libs', action='store_true',
+        help='Convert link libraries to Requires')
+    parser.add_argument(
+        '-k', '--keep-link-lib', type=str, action='append', default=[],
+        help='Link libraries to not convert to Requires (if -c is used)')
     args = parser.parse_args(args)
 
-    package = parse(args.input)
-
+    package = parse(args.input, args.library_name, args.library_type,
+                    args.convert_link_libs, set(args.keep_link_lib))
     component_name = package.attr.get('Name', package.name)
     spec = {
         'Cps-Version': cps.current_version,
