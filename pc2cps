@@ -140,8 +140,7 @@ class pkgconfig(object):
             if self._library_name.startswith('lib'):
                 my_libnames.add(self._library_name[3:])
 
-            link_libs = [x for x in link_libs if not x in my_libnames]
-
+            link_libs = [x for x in link_libs if x not in my_libnames]
 
         # Convert link libraries to Requires
         pkg_deps = self._ordered_requires
@@ -221,7 +220,7 @@ def extend(data, key, value):
 
 #------------------------------------------------------------------------------
 def append(data, key, value):
-    if not key in data:
+    if key not in data:
         data[key] = []
     data[key].append(value)
 
