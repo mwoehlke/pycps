@@ -8,6 +8,7 @@ supported_cps_versions = sv.Spec('>=0.6.0,<=%s' % current_version)
 class Object(object):
     #--------------------------------------------------------------------------
     def __init__(self, json_data, prefix=None):
+        self.data = json_data
         self.extensions = {}
 
         for key, value in json_data.iteritems():
