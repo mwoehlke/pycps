@@ -99,6 +99,8 @@ class Configuration(Object):
 
 #==============================================================================
 class Component(Configuration):
+    supplemental_schema = ['description', 'license']
+
     #--------------------------------------------------------------------------
     def __init__(self, json_data, prefix=None, package=None):
         super(Component, self).__init__(json_data, prefix, package)
@@ -106,6 +108,8 @@ class Component(Configuration):
         self.kind = _get('type', json_data, required=True)
         self.configurations = _make_dict(Configuration, 'configurations',
                                          json_data, prefix, package, self)
+        # Supplemental schema
+        _get_supplemental_schema(self, self.supplemental_schema, json_data)
 
 #==============================================================================
 class Requirement(Object):
@@ -141,6 +145,8 @@ class Platform(Object):
 
 #==============================================================================
 class Package(Object):
+    supplemental_schema = ['description', 'display-name', 'license', 'meta-comment', 'website']
+
     #--------------------------------------------------------------------------
     def __init__(self, path, json_data):
         super(Package, self).__init__(json_data)
@@ -169,6 +175,9 @@ class Package(Object):
 
         if self.compat_version is None:
             self.compat_version = self.version
+
+        # Supplemental schema
+        _get_supplemental_schema(self, self.supplemental_schema, json_data)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -211,6 +220,14 @@ def _normalize_values(json_data, normalize_function):
 
     else:
         return json_data
+
+#------------------------------------------------------------------------------
+def _get_supplemental_schema(obj, schema, json_data):
+    for attribute in schema:
+        value = _get(attribute, json_data)
+        if value:
+            attribute_name = attribute.replace("-", "_")
+            setattr(obj, attribute_name, value)
 
 #------------------------------------------------------------------------------
 def _get(key, json_data, default=None, required=False):
