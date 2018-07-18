@@ -1,0 +1,209 @@
+#!/usr/bin/env python
+
+import argparse
+import cps
+import os
+import re
+import subprocess
+import sys
+
+from collections import OrderedDict
+
+_default_prefix = '${pcfiledir}/../..'
+
+_supported_compilers = ['gcc', 'clang']
+_supported_kernels = ['cygwin', 'linux', 'darwin']
+
+# Compile definitions
+_re_definitions = re.compile('(!)?(.*)')
+_unix_definition_prefixes = {None: '-D', '!': '-U'}
+_compilers_definition_prefixes = {
+    'gcc': _unix_definition_prefixes, 'clang': _unix_definition_prefixes}
+
+# Compile features
+_re_we_features = re.compile('((no)?(warn|error):(error$)?)(.*)')
+_W_we_prefixes = {
+    'warn:error': '-Werror', 'nowarn:error': '-Wno-error', 'warn:': '-W',
+    'nowarn:': '-Wno-', 'error:': '-Werror=', 'noerror:': '-Wno-error='}
+_compilers_we_prefixes = {'gcc': _W_we_prefixes, 'clang': _W_we_prefixes}
+_supported_compiler_feature_list = [
+    'c99', 'c11', 'c++03', 'c++11', 'c++14', 'c++17', 'gnu']
+_supported_gcc_features = {
+    x: '--std=%s' % x for x in _supported_compiler_feature_list}
+_supported_clang_features = _supported_gcc_features
+_supported_compile_features = {
+    'gcc': _supported_gcc_features, 'clang': _supported_clang_features}
+
+# Link features
+_supported_link_features = {x: {'threads': '-lpthread'}
+                            for x in _supported_kernels}
+
+#------------------------------------------------------------------------------
+def get_link_features(link_features, platform):
+
+    try:
+        features = []
+        for feature in link_features:
+            features.append(_supported_link_features[platform][feature])
+        return features
+    except KeyError as k:
+        sys.stderr.write("Unknown link feature %s on %s" % (k.message, platform))  # noqa
+
+#------------------------------------------------------------------------------
+def get_compile_features(compile_features, compiler):
+    features = []
+    # For loop with catch KeyError exception and check with
+    # WError, and W... flags
+    for feature in compile_features:
+        try:
+            features.append(_supported_compile_features[compiler][feature])
+        except KeyError as k:
+            # Warning specifiers are too divers to enumerate; we detect them
+            # with a regular expression instead
+            ma = _re_we_features.match(feature)
+            if ma is not None:
+                we_prefix = _compilers_we_prefixes[compiler][ma.group(1)]
+                features.append(we_prefix + ma.group(5))
+                continue
+            sys.stderr.write(
+                "Unknown compile feature %s on %s" % (k.message, compiler))
+    return features
+
+#------------------------------------------------------------------------------
+def get_definitions_flags(compile_definitions, compiler):
+    definitions = []
+    for definition in compile_definitions:
+        try:
+            ma = _re_definitions.match(definition)
+            # No need to test result `ma` as regex catches everything.
+            prefix = _compilers_definition_prefixes[compiler][ma.groups()[0]]
+            definitions.append(prefix + ma.groups()[1])
+        except KeyError:
+            # This should never happen as the list of supported compilers
+            # is hard-coded and the definitions either start with `!` or don't.
+            # If we are here, there is a bug.
+            raise Exception('Problem reading definition argument `%s`. '
+                            'Most likely a bug in this script.' % definition)
+    return definitions
+
+#------------------------------------------------------------------------------
+def get_platform(package):
+    try:
+        return package.platform.kernel
+    except AttributeError:
+        try:
+            output = subprocess.check_output(['uname', '-s'])
+            return output.strip().lower()
+        except OSError:
+            raise Exception('Unable to detect current platform')
+
+#------------------------------------------------------------------------------
+def get_kind_pc_dictionary(kind, location):
+    kind_dict = {}
+    if kind == 'exe':
+        raise Exception('executable')
+    elif kind in ['dylib', 'static'] and location:
+        # Full path is specified directly without any flag.
+        kind_dict['Libs'] = [' %s' % location]
+    elif kind == 'jar':
+        kind_dict['classpath'] = location
+    elif kind == 'interface':
+        pass
+    else:
+        raise Exception(kind)
+    return kind_dict
+
+#------------------------------------------------------------------------------
+def write_pc(pc_dict, filename, prefix):
+    def list_to_str(l):
+        return ' '.join(l)
+    convert = {'unicode': unicode, 'str': str, 'list': list_to_str}
+    with open(filename, 'w') as f:
+        for k, v in pc_dict.iteritems():
+            f.write('%s: %s\n' % (k, convert[type(v).__name__](v).replace(
+                '@prefix@', prefix)))
+
+#------------------------------------------------------------------------------
+def remove_empty_keys(pc_dict):
+    for k, v in pc_dict.iteritems():
+        if not v:
+            pc_dict.pop(k)
+
+#------------------------------------------------------------------------------
+def write_targets_config(package, output_dir, compiler, prefix):
+    platform = get_platform(package)
+    for component_name, component in package.components.iteritems():
+        # Ignored CPS tags (not supported by pkgconfig):
+        # * Link-Languages
+        # * Configurations
+        pc_dict = OrderedDict()
+        pc_dict['Name'] = component_name
+        pc_dict['Version'] = package.version
+
+        # Handle supplemental schema
+        for element in ['Description', 'Website']:
+            pc_dict[element] = package.data.get(element)
+
+        # Add libraries
+        pc_dict['Libs'] = []
+        try:
+            # In theory, we care about both `link_location` and `location`
+            # properties of the component. In practice, Link-Location
+            # supersedes Location for our purposes, and if the CPS did not
+            # specify Link-Location, PyCPS fills `link_location` from Location.
+            pc_dict.update(
+                get_kind_pc_dictionary(component.kind, component.link_location)
+            )
+        except Exception as e:
+            print('Skipping %s: %s kind is not supported by pkgconfig' %\
+                  (component_name, e))
+            continue
+
+        pc_dict['Libs'] += component.link_libraries
+        if component.link_requires:
+            sys.stderr.write(
+                "Link-Requires found in input file but not supported.")
+        pc_dict['Libs'] += component.link_flags[None]
+        pc_dict['Libs'] += get_link_features(component.link_features, platform)
+
+        # Add compile flags
+        pc_dict['Cflags'] = []
+        pc_dict['Cflags'] += list(component.compile_flags[None])
+        pc_dict['Cflags'] += ['-I%s' % x for x in component.includes[None]]
+        pc_dict['Cflags'] += get_definitions_flags(
+            component.definitions[None], compiler)
+        pc_dict['Cflags'] += get_compile_features(
+            component.compile_features, compiler)
+        # Remove package name from possibly-qualified component names. This is
+        # a limited implementation that may not work in all cases and is likely
+        # to be improved in the future.
+        pc_dict['Requires'] = [x.split(':')[-1] for x in component.requires]
+
+        # Clean up and write .pc
+        remove_empty_keys(pc_dict)
+        filename = os.path.join(output_dir, component_name + '.pc')
+        write_pc(pc_dict, filename, prefix)
+
+#------------------------------------------------------------------------------
+def main(args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input', metavar='CPS_FILE', type=str,
+                        help='Input CPS file')
+    parser.add_argument('output', metavar='OUTPUT_DIRECTORY', type=str,
+                        help='Output directory for pkgconf files')
+    parser.add_argument('--compiler', choices=_supported_compilers,
+                        default=_supported_compilers[0],
+                        help='Targeted compiler')
+    parser.add_argument('--prefix', type=str,
+                        default=_default_prefix,
+                        help='Use given prefix instead of ' + _default_prefix)
+
+    args = parser.parse_args(args)
+    package = cps.read(args.input, canonicalize=True)
+
+    write_targets_config(package, args.output, args.compiler, args.prefix)
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
