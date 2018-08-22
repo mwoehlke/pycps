@@ -128,8 +128,11 @@ def remove_empty_keys(pc_dict):
             pc_dict.pop(k)
 
 #------------------------------------------------------------------------------
-def write_targets_config(package, output_dir, compiler, prefix):
+def write_targets_config(package, output, is_file, compiler, prefix):
     platform = get_platform(package)
+    if is_file and len(package.components) != 1:
+        raise Exception(
+            "More than one component. Please provide an output directory.")
     for component_name, component in package.components.iteritems():
         # Ignored CPS tags (not supported by pkgconfig):
         # * Link-Languages
@@ -150,7 +153,7 @@ def write_targets_config(package, output_dir, compiler, prefix):
                 get_kind_pc_dictionary(component.kind, component.link_location)
             )
         except Exception as e:
-            print('Skipping %s: %s kind is not supported by pkgconfig' %\
+            print('Skipping %s: %s kind is not supported by pkgconfig' %
                   (component_name, e))
             continue
         pc_dict['Libs'] += component.link_libraries
@@ -171,7 +174,10 @@ def write_targets_config(package, output_dir, compiler, prefix):
         # to be improved in the future.
         pc_dict['Requires'] = [x.split(':')[-1] for x in component.requires]
         remove_empty_keys(pc_dict)
-        filename = os.path.join(output_dir, component_name + ".pc")
+        if is_file:
+            filename = output
+        else:
+            filename = os.path.join(output, component_name + ".pc")
         write_pc(pc_dict, filename, prefix)
 
 #------------------------------------------------------------------------------
@@ -179,8 +185,10 @@ def main(args):
     parser = argparse.ArgumentParser()
     parser.add_argument('input', metavar='CPS_FILE', type=str,
                         help='Input CPS file')
-    parser.add_argument('output', metavar='OUTPUT_DIRECTORY', type=str,
+    parser.add_argument('--output-dir', metavar='OUTPUT_DIRECTORY', type=str,
                         help='Output directory for pkgconf files')
+    parser.add_argument('--output-file', metavar='OUTPUT_FILE',
+                        type=str, help='Output file names for pkgconf files')
     parser.add_argument('--compiler', choices=_supported_compilers,
                         default=_supported_compilers[0],
                         help='Targeted compiler')
@@ -190,9 +198,20 @@ def main(args):
                         )
 
     args = parser.parse_args(args)
+    if (args.output_dir and args.output_file) or \
+            (not args.output_dir and not args.output_file):
+        print("Please provide either --output-dir or --output-file.")
+        sys.exit(-1)
+    # Convert arguments to boolean to simplify processing later
+    if args.output_file:
+        is_file = True
+        output = args.output_file
+    else:
+        is_file = False
+        output = args.output_dir
     package = cps.read(args.input, canonicalize=True)
 
-    write_targets_config(package, args.output, args.compiler, args.prefix)
+    write_targets_config(package, output, is_file, args.compiler, args.prefix)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
