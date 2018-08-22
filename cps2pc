@@ -39,23 +39,35 @@ _supported_link_features = {x: {'threads': '-lpthread'}
                             for x in _supported_kernels}
 
 #------------------------------------------------------------------------------
-def get_link_features(link_features, platform):
+def warn(component, msg, *args, **kwargs):
+    pn = os.path.basename(sys.argv[0])
+    cn = component.name
 
-    try:
-        features = []
-        for feature in link_features:
-            features.append(_supported_link_features[platform][feature])
-        return features
-    except KeyError as k:
-        sys.stderr.write("Unknown link feature %s on %s" % (k.message, platform))  # noqa
+    sys.stderr.write('{}: warning: '.format(pn))
+    sys.stderr.write(msg.format(*args, **kwargs))
+    sys.stderr.write(
+        '\n{}: warning:   while processing component \'{}\'\n'.format(pn, cn))
 
 #------------------------------------------------------------------------------
-def get_compile_features(compile_features, compiler):
+def get_link_features(component, platform):
     features = []
-    # For loop with catch KeyError exception and check with
-    # WError, and W... flags
-    for feature in compile_features:
+
+    for feature in component.link_features:
         try:
+            features.append(_supported_link_features[platform][feature])
+        except KeyError:
+            warn(component, 'unknown link feature \'{}\' on \'{}\'',
+                 feature, platform)
+
+    return features
+
+#------------------------------------------------------------------------------
+def get_compile_features(component, compiler):
+    features = []
+
+    for feature in component.compile_features:
+        try:
+            # Check feature map first
             features.append(_supported_compile_features[compiler][feature])
         except KeyError as k:
             # Warning specifiers are too divers to enumerate; we detect them
@@ -65,8 +77,12 @@ def get_compile_features(compile_features, compiler):
                 we_prefix = _compilers_we_prefixes[compiler][ma.group(1)]
                 features.append(we_prefix + ma.group(5))
                 continue
-            sys.stderr.write(
-                "Unknown compile feature %s on %s" % (k.message, compiler))
+
+            # Not an enumerated feature or a warning specifier; don't know what
+            # it is, so spit out a warning
+            warn(component, 'unknown compile feature \'{}\' on \'{}\'',
+                 feature, compiler)
+
     return features
 
 #------------------------------------------------------------------------------
@@ -133,6 +149,8 @@ def remove_empty_keys(pc_dict):
 def write_targets_config(package, output_dir, compiler, prefix):
     platform = get_platform(package)
     for component_name, component in package.components.iteritems():
+        setattr(component, 'name', component_name)
+
         # Ignored CPS tags (not supported by pkgconfig):
         # * Link-Languages
         # * Configurations
@@ -155,16 +173,17 @@ def write_targets_config(package, output_dir, compiler, prefix):
                 get_kind_pc_dictionary(component.kind, component.link_location)
             )
         except Exception as e:
-            print('Skipping %s: %s kind is not supported by pkgconfig' %\
-                  (component_name, e))
+            warn(component,
+                 'component kind \'{}\' is not supported by pkgconfig',
+                 component.kind)
             continue
 
         pc_dict['Libs'] += component.link_libraries
         if component.link_requires:
-            sys.stderr.write(
-                "Link-Requires found in input file but not supported.")
+            warn(component, 'Link-Requires is being ignored, '
+                 'as it is not supported at this time')
         pc_dict['Libs'] += component.link_flags[None]
-        pc_dict['Libs'] += get_link_features(component.link_features, platform)
+        pc_dict['Libs'] += get_link_features(component, platform)
 
         # Add compile flags
         pc_dict['Cflags'] = []
@@ -172,8 +191,8 @@ def write_targets_config(package, output_dir, compiler, prefix):
         pc_dict['Cflags'] += ['-I%s' % x for x in component.includes[None]]
         pc_dict['Cflags'] += get_definitions_flags(
             component.definitions[None], compiler)
-        pc_dict['Cflags'] += get_compile_features(
-            component.compile_features, compiler)
+        pc_dict['Cflags'] += get_compile_features(component, compiler)
+
         # Remove package name from possibly-qualified component names. This is
         # a limited implementation that may not work in all cases and is likely
         # to be improved in the future.
