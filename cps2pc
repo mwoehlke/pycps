@@ -149,10 +149,9 @@ def remove_empty_keys(pc_dict):
 def write_targets_config(package, output, single_output, compiler, prefix):
     platform = get_platform(package)
     if single_output and len(package.components) != 1:
-        # TODO reword this
-        raise Exception('Cannot '
-                        ''
-            "More than one component. Please provide an output directory.")
+        raise Exception('Cannot write to file: '
+                        'input CPS describes more than one component. '
+                        'Use --output-dir instead.')
     for component_name, component in package.components.iteritems():
         setattr(component, 'name', component_name)
 
