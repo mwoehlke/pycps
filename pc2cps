@@ -112,6 +112,8 @@ class pkgconfig(object):
             # If found, accept a match for the current type being searched
             if match:
                 return os.path.join(path, match), lib_type
+        # Not found
+        return None, None
 
     #--------------------------------------------------------------------------
     def _extract_component(self, libs_to_requires, keep_link_libs):
