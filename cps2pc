@@ -146,8 +146,13 @@ def remove_empty_keys(pc_dict):
             pc_dict.pop(k)
 
 #------------------------------------------------------------------------------
-def write_targets_config(package, output_dir, compiler, prefix):
+def write_targets_config(package, output, single_output, compiler, prefix):
     platform = get_platform(package)
+    if single_output and len(package.components) != 1:
+        # TODO reword this
+        raise Exception('Cannot '
+                        ''
+            "More than one component. Please provide an output directory.")
     for component_name, component in package.components.iteritems():
         setattr(component, 'name', component_name)
 
@@ -201,7 +206,10 @@ def write_targets_config(package, output_dir, compiler, prefix):
 
         # Clean up and write .pc
         remove_empty_keys(pc_dict)
-        filename = os.path.join(output_dir, component_name + '.pc')
+        if single_output:
+            filename = output
+        else:
+            filename = os.path.join(output, component_name + '.pc')
         write_pc(pc_dict, filename, prefix)
 
 #------------------------------------------------------------------------------
@@ -209,8 +217,11 @@ def main(args):
     parser = argparse.ArgumentParser()
     parser.add_argument('input', metavar='CPS_FILE', type=str,
                         help='Input CPS file')
-    parser.add_argument('output', metavar='OUTPUT_DIRECTORY', type=str,
+    outarg = parser.add_mutually_exclusive_group(required=True)
+    outarg.add_argument('--output-dir', metavar='OUTPUT_DIRECTORY', type=str,
                         help='Output directory for pkgconf files')
+    outarg.add_argument('--output-file', metavar='OUTPUT_FILE',
+                        type=str, help='Output file names for pkgconf files')
     parser.add_argument('--compiler', choices=_supported_compilers,
                         default=_supported_compilers[0],
                         help='Targeted compiler')
@@ -218,10 +229,23 @@ def main(args):
                         default=_default_prefix,
                         help='Use given prefix instead of ' + _default_prefix)
 
+    # Parse arguments
     args = parser.parse_args(args)
+
+    # Convert arguments to Boolean to simplify processing later
+    if args.output_file:
+        single_output = True
+        output = args.output_file
+    else:
+        single_output = False
+        output = args.output_dir
+
+    # Read input CPS
     package = cps.read(args.input, canonicalize=True)
 
-    write_targets_config(package, args.output, args.compiler, args.prefix)
+    # Write output file(s)
+    write_targets_config(package, output, single_output,
+                         args.compiler, args.prefix)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
