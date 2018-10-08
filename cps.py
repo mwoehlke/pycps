@@ -1,4 +1,14 @@
+import sys
+
 import semantic_version as sv
+
+# Compatibility, without depending on `six`.
+if sys.version_info.major >= 3:
+    iteritems = dict.items
+    unicode = str
+    def map(f, xs): return [f(x) for x in xs]
+else:
+    iteritems = dict.iteritems
 
 current_version_info = [0, 8, 0]
 current_version = ".".join(map(str, current_version_info))
@@ -11,7 +21,7 @@ class Object(object):
         self.data = json_data
         self.extensions = {}
 
-        for key, value in json_data.iteritems():
+        for key, value in iteritems(json_data):
             if key.lower().startswith('x-'):
                 self.extensions[key] = value
 
@@ -174,7 +184,7 @@ class Package(Object):
 
 #------------------------------------------------------------------------------
 def _dvmap(func, d):
-    return {key: func(value) for key, value in d.iteritems()}
+    return {key: func(value) for key, value in iteritems(d)}
 
 #------------------------------------------------------------------------------
 def _normalize_path(path, prefix):
@@ -215,7 +225,7 @@ def _normalize_values(json_data, normalize_function):
 #------------------------------------------------------------------------------
 def _get(key, json_data, default=None, required=False):
     key = key.lower()
-    for jk, jv in json_data.iteritems():
+    for jk, jv in iteritems(json_data):
         if jk.lower() == key:
             return jv if jv is not None else default
 
@@ -247,7 +257,7 @@ def _make(constructor, key, json_data, *args):
 #------------------------------------------------------------------------------
 def _make_dict(constructor, key, json_data, *args):
     result = {}
-    for name, data in _get(key, json_data, {}).iteritems():
+    for name, data in iteritems(_get(key, json_data, {})):
         result[name] = constructor(data, *args)
 
     return result
@@ -273,4 +283,4 @@ def read(filepath, canonicalize=True):
 
 if __name__ == '__main__':
     import sys
-    print read(sys.argv[1])
+    print(read(sys.argv[1]))

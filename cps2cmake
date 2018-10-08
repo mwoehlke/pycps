@@ -1,9 +1,15 @@
 #!/usr/bin/env python
 
 import argparse
-import cps
 import os
 import sys
+
+import cps
+from cps import iteritems
+
+if sys.version_info.major >= 3:
+    # N.B. Cannot access `cps.map` easily.
+    def map(f, xs): return [f(x) for x in xs]
 
 get_extension = cps.get_extension
 
@@ -248,7 +254,7 @@ def print_cmake_extensions(package, ext_template='X-CMake-{}'):
         print('include(%s)' % item)
 
     varvar = ext_template.format('Variables')
-    for item in get_extension(package, varvar, {}).iteritems():
+    for item in iteritems(get_extension(package, varvar, {})):
         print('set(%s "%s")' % item)
 
 #------------------------------------------------------------------------------
@@ -258,7 +264,7 @@ def print_targets_config(package):
 
     print_cmake_extensions(package, 'X-CMake-{}-Init')
 
-    for requirement_name, requirement_info in package.requires.iteritems():
+    for requirement_name, requirement_info in iteritems(package.requires):
         fd_args = ''
         if requirement_info.version is not None:
             fd_args += ' ' + requirement_info.version
@@ -280,7 +286,7 @@ def print_targets_config(package):
         print('set(%s_VERSION "%s")' % (package.name, package.version))
         print('')
 
-    for component_name, component in package.components.iteritems():
+    for component_name, component in iteritems(package.components):
         component_name = cmake_qualified_component_name(package, component_name)
         print_target_rules(package, component_name, component)
         print('')
