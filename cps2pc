@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 from collections import OrderedDict
+from cps import iterate
 
 _default_prefix = '${pcfiledir}/../..'
 
@@ -135,13 +136,13 @@ def write_pc(pc_dict, filename, prefix):
         return ' '.join(l)
     convert = {'unicode': unicode, 'str': str, 'list': list_to_str}
     with open(filename, 'w') as f:
-        for k, v in pc_dict.iteritems():
+        for k, v in iterate(pc_dict):
             f.write('%s: %s\n' % (k, convert[type(v).__name__](v).replace(
                 '@prefix@', prefix)))
 
 #------------------------------------------------------------------------------
 def remove_empty_keys(pc_dict):
-    for k, v in pc_dict.iteritems():
+    for k, v in iterate(pc_dict):
         if not v:
             pc_dict.pop(k)
 
@@ -152,7 +153,7 @@ def write_targets_config(package, output, single_output, compiler, prefix):
         raise Exception('Cannot write to file: '
                         'input CPS describes more than one component. '
                         'Use --output-dir instead.')
-    for component_name, component in package.components.iteritems():
+    for component_name, component in iterate(package.components):
         setattr(component, 'name', component_name)
 
         # Ignored CPS tags (not supported by pkgconfig):

@@ -1,8 +1,17 @@
+import sys
+
 import semantic_version as sv
 
 current_version_info = [0, 8, 0]
 current_version = ".".join(map(str, current_version_info))
 supported_cps_versions = sv.Spec('>=0.6.0,<=%s' % current_version)
+
+# Some Python 2/3 compatibility stuff
+if sys.version_info.major >= 3:
+    iterate = dict.items
+    unicode = str
+else:
+    iterate = dict.iteritems
 
 #==============================================================================
 class Object(object):
@@ -11,7 +20,7 @@ class Object(object):
         self.data = json_data
         self.extensions = {}
 
-        for key, value in json_data.iteritems():
+        for key, value in iterate(json_data):
             if key.lower().startswith('x-'):
                 self.extensions[key] = value
 
@@ -174,7 +183,7 @@ class Package(Object):
 
 #------------------------------------------------------------------------------
 def _dvmap(func, d):
-    return {key: func(value) for key, value in d.iteritems()}
+    return {key: func(value) for key, value in iterate(d)}
 
 #------------------------------------------------------------------------------
 def _normalize_path(path, prefix):
@@ -204,7 +213,7 @@ def _normalize_values(json_data, normalize_function):
         return _dvmap(normalize_recurse, json_data)
 
     elif type(json_data) is list:
-        return map(normalize_recurse, json_data)
+        return list(map(normalize_recurse, json_data))
 
     elif type(json_data) is unicode:
         return normalize_function(json_data)
@@ -215,7 +224,7 @@ def _normalize_values(json_data, normalize_function):
 #------------------------------------------------------------------------------
 def _get(key, json_data, default=None, required=False):
     key = key.lower()
-    for jk, jv in json_data.iteritems():
+    for jk, jv in iterate(json_data):
         if jk.lower() == key:
             return jv if jv is not None else default
 
@@ -247,7 +256,7 @@ def _make(constructor, key, json_data, *args):
 #------------------------------------------------------------------------------
 def _make_dict(constructor, key, json_data, *args):
     result = {}
-    for name, data in _get(key, json_data, {}).iteritems():
+    for name, data in iterate(_get(key, json_data, {})):
         result[name] = constructor(data, *args)
 
     return result
@@ -273,4 +282,4 @@ def read(filepath, canonicalize=True):
 
 if __name__ == '__main__':
     import sys
-    print read(sys.argv[1])
+    print(read(sys.argv[1]))
