@@ -141,10 +141,16 @@ def write_pc(pc_dict, filename, prefix):
                 '@prefix@', prefix)))
 
 #------------------------------------------------------------------------------
-def remove_empty_keys(pc_dict):
+def remove_empty_values(pc_dict):
+    # Record empty keys (so we aren't modifying the dict during iteration)
+    empty = set()
     for k, v in iterate(pc_dict):
         if not v:
-            pc_dict.pop(k)
+            empty.add(k)
+
+    # Remove empty keys
+    for k in empty:
+        pc_dict.pop(k)
 
 #------------------------------------------------------------------------------
 def write_targets_config(package, output, single_output, compiler, prefix):
@@ -205,7 +211,7 @@ def write_targets_config(package, output, single_output, compiler, prefix):
         pc_dict['Requires'] = [x.split(':')[-1] for x in component.requires]
 
         # Clean up and write .pc
-        remove_empty_keys(pc_dict)
+        remove_empty_values(pc_dict)
         if single_output:
             filename = output
         else:
