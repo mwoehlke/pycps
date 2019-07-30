@@ -275,7 +275,9 @@ def read(filepath, canonicalize=True):
     else:
         path = None
 
-    json_data = json.load(open(filepath))
+    with open(filepath) as f:
+        json_data = json.load(f)
+
     return Package(path, json_data)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
