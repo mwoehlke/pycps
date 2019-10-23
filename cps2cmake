@@ -125,9 +125,13 @@ library_types = {
 
 cpp11_features = {'cxx_decltype'}
 cpp14_features = {'cxx_decltype_auto'}.union(cpp11_features)
+cpp17_features = {'cxx_std_17'}
+cpp20_features = {'cxx_std_20'}
 feature_map = {
     'c++11': cpp11_features,
     'c++14': cpp14_features,
+    'c++17': cpp17_features,
+    'c++20': cpp20_features,
 }
 
 #------------------------------------------------------------------------------
