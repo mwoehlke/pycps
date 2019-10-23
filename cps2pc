@@ -28,7 +28,7 @@ _W_we_prefixes = {
     'nowarn:': '-Wno-', 'error:': '-Werror=', 'noerror:': '-Wno-error='}
 _compilers_we_prefixes = {'gcc': _W_we_prefixes, 'clang': _W_we_prefixes}
 _supported_compiler_feature_list = [
-    'c99', 'c11', 'c++03', 'c++11', 'c++14', 'c++17', 'gnu']
+    'c99', 'c11', 'c++03', 'c++11', 'c++14', 'c++17', 'c++20', 'gnu']
 _supported_gcc_features = {
     x: '--std=%s' % x for x in _supported_compiler_feature_list}
 _supported_clang_features = _supported_gcc_features
